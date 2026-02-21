@@ -1,0 +1,17 @@
+name = "gis-ph-mcp"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+routes = [
+  { pattern = "mcp.gis.ph/*", custom_domain = true }
+]
+
+[durable_objects]
+bindings = [
+  { name = "MCP_OBJECT", class_name = "GisPhMCP" }
+]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["GisPhMCP"]
