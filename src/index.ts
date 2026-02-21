@@ -259,7 +259,7 @@ export default {
     // Require the user's API key for all MCP endpoints
     // We check both the x-api-key header and the 'key' query parameter
     // (Query param is useful for Claude Desktop which doesn't support custom headers for SSE)
-    const apiKey = url.searchParams.get("key") ?? request.headers.get("x-api-key") ?? "";
+    const apiKey = request.headers.get("x-api-key") ?? url.searchParams.get("key") ?? "";
 
     if (!apiKey) {
       console.error("[gis.ph] Error: Missing API key. Provide it via 'x-api-key' header or '?key=' query param.");
