@@ -12,16 +12,21 @@ const BASE_URL = "https://api.gis.ph/v1";
 async function gisApi(
   path: string,
   apiKey: string,
-  params?: Record<string, string>
+  options?: { params?: Record<string, string>; method?: string; body?: unknown }
 ): Promise<unknown> {
   const url = new URL(BASE_URL + path);
-  if (params) {
-    for (const [key, value] of Object.entries(params)) {
+  if (options?.params) {
+    for (const [key, value] of Object.entries(options.params)) {
       if (value) url.searchParams.set(key, value);
     }
   }
   const response = await fetch(url.toString(), {
-    headers: { Authorization: `Bearer ${apiKey}` },
+    method: options?.method ?? "GET",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: options?.body ? JSON.stringify(options.body) : undefined,
   });
   if (!response.ok) {
     const error = await response.text();
@@ -33,11 +38,24 @@ async function gisApi(
 function buildMcpServer(apiKey: string): McpServer {
   const server = new McpServer({ name: "gis-ph", version: "1.0.0" });
 
-  server.tool("debug_key", "Show key info for debugging", {}, async () => ({
-    content: [{ type: "text", text: JSON.stringify({ key_length: apiKey.length, key_preview: apiKey.substring(0, 4) }) }],
-  }));
+  // ── Regions ────────────────────────────────────────────────────────────
+  server.tool("get_regions", "Get all regions in the Philippines", {}, async () => {
+    const data = await gisApi("/regions", apiKey);
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  });
 
-  server.tool("get_provinces", "Get all 81 provinces in the Philippines", {}, async () => {
+  server.tool(
+    "get_region",
+    "Get details of a specific region by its code",
+    { region_code: z.string().describe("Region code") },
+    async ({ region_code }) => {
+      const data = await gisApi(`/regions/${region_code}`, apiKey);
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  // ── Provinces ──────────────────────────────────────────────────────────
+  server.tool("get_provinces", "Get all provinces in the Philippines", {}, async () => {
     const data = await gisApi("/provinces", apiKey);
     return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
   });
@@ -52,38 +70,40 @@ function buildMcpServer(apiKey: string): McpServer {
     }
   );
 
+  // ── Municities ─────────────────────────────────────────────────────────
   server.tool(
-    "get_cities",
+    "get_municities",
     "Get all cities and municipalities, optionally filtered by province",
     { province_code: z.string().optional().describe("Province code to filter by") },
     async ({ province_code }) => {
-      const data = await gisApi("/cities", apiKey, province_code ? { province_code } : undefined);
+      const data = await gisApi("/municities", apiKey, province_code ? { params: { province_code } } : undefined);
       return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
     }
   );
 
   server.tool(
-    "get_city",
+    "get_municity",
     "Get details of a specific city or municipality by its code",
-    { city_code: z.string().describe("City or municipality code") },
-    async ({ city_code }) => {
-      const data = await gisApi(`/cities/${city_code}`, apiKey);
+    { municity_code: z.string().describe("City or municipality code") },
+    async ({ municity_code }) => {
+      const data = await gisApi(`/municities/${municity_code}`, apiKey);
       return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
     }
   );
 
+  // ── Barangays ──────────────────────────────────────────────────────────
   server.tool(
     "get_barangays",
-    "Get all barangays, optionally filtered by city or province",
+    "Get all barangays, optionally filtered by municity or province",
     {
-      city_code: z.string().optional().describe("City/municipality code to filter by"),
+      municity_code: z.string().optional().describe("City/municipality code to filter by"),
       province_code: z.string().optional().describe("Province code to filter by"),
     },
-    async ({ city_code, province_code }) => {
+    async ({ municity_code, province_code }) => {
       const params: Record<string, string> = {};
-      if (city_code) params.city_code = city_code;
+      if (municity_code) params.municity_code = municity_code;
       if (province_code) params.province_code = province_code;
-      const data = await gisApi("/barangays", apiKey, params);
+      const data = await gisApi("/barangays", apiKey, { params });
       return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
     }
   );
@@ -98,49 +118,113 @@ function buildMcpServer(apiKey: string): McpServer {
     }
   );
 
+  // ── Datasets ───────────────────────────────────────────────────────────
   server.tool(
-    "search_location",
-    "Search for any location in the Philippines by name",
-    {
-      query: z.string().describe("Location name to search"),
-      type: z.enum(["province", "city", "municipality", "barangay"]).optional(),
-    },
-    async ({ query, type }) => {
-      const params: Record<string, string> = { q: query };
-      if (type) params.type = type;
-      const data = await gisApi("/search", apiKey, params);
+    "list_datasets",
+    "List all datasets, optionally including their features",
+    { include_features: z.boolean().optional().describe("Include features in each dataset") },
+    async ({ include_features }) => {
+      const params: Record<string, string> = {};
+      if (include_features) params.includeFeatures = "true";
+      const data = await gisApi("/datasets", apiKey, { params });
       return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
     }
   );
 
   server.tool(
-    "reverse_geocode",
-    "Find the barangay, city, and province for given coordinates",
-    {
-      lat: z.number().describe("Latitude"),
-      lng: z.number().describe("Longitude"),
-    },
-    async ({ lat, lng }) => {
-      const data = await gisApi("/reverse-geocode", apiKey, {
-        lat: String(lat),
-        lng: String(lng),
-      });
+    "get_dataset",
+    "Get a single dataset by its ID",
+    { dataset_id: z.string().describe("Dataset UUID") },
+    async ({ dataset_id }) => {
+      const data = await gisApi(`/datasets/${dataset_id}`, apiKey);
       return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
     }
   );
 
   server.tool(
-    "get_demographics",
-    "Get demographic and population data for a location",
+    "create_dataset",
+    "Create a new dataset, optionally with features",
     {
-      location_code: z.string().describe("Province, city, or barangay code"),
-      level: z.enum(["province", "city", "barangay"]).describe("Geographic level"),
+      name: z.string().describe("Dataset name"),
+      description: z.string().optional().describe("Dataset description"),
+      data_type: z.enum(["vector", "raster"]).optional().describe("Data type"),
+      geometry_type: z.enum(["POINT", "LINESTRING", "POLYGON", "MULTIPOINT", "MULTILINESTRING", "MULTIPOLYGON"]).optional().describe("Geometry type"),
+      srid: z.number().optional().describe("Spatial reference ID, default 4326"),
     },
-    async ({ location_code, level }) => {
-      const data = await gisApi("/analytics/demographics", apiKey, {
-        code: location_code,
-        level,
-      });
+    async ({ name, description, data_type, geometry_type, srid }) => {
+      const body: Record<string, unknown> = { name };
+      if (description) body.description = description;
+      if (data_type) body.data_type = data_type;
+      if (geometry_type) body.geometry_type = geometry_type;
+      if (srid) body.srid = srid;
+      const data = await gisApi("/datasets", apiKey, { method: "POST", body });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    "update_dataset",
+    "Update an existing dataset",
+    {
+      dataset_id: z.string().describe("Dataset UUID"),
+      name: z.string().optional().describe("New name"),
+      description: z.string().optional().describe("New description"),
+    },
+    async ({ dataset_id, name, description }) => {
+      const body: Record<string, unknown> = {};
+      if (name) body.name = name;
+      if (description) body.description = description;
+      const data = await gisApi(`/datasets/${dataset_id}`, apiKey, { method: "PATCH", body });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  // ── Features ───────────────────────────────────────────────────────────
+  server.tool(
+    "list_features",
+    "List all features",
+    {},
+    async () => {
+      const data = await gisApi("/features", apiKey);
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    "get_feature",
+    "Get a single feature by its ID",
+    { feature_id: z.string().describe("Feature ID") },
+    async ({ feature_id }) => {
+      const data = await gisApi(`/features/${feature_id}`, apiKey);
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    "get_features_by_dataset",
+    "Get all features belonging to a dataset",
+    { dataset_id: z.string().describe("Dataset UUID") },
+    async ({ dataset_id }) => {
+      const data = await gisApi(`/features/dataset/${dataset_id}`, apiKey);
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    "create_feature",
+    "Create a new feature in a dataset",
+    {
+      dataset_id: z.string().describe("Dataset UUID"),
+      geometry: z.object({
+        type: z.string().describe("GeoJSON geometry type e.g. Point, Polygon"),
+        coordinates: z.array(z.unknown()).describe("GeoJSON coordinates"),
+      }).describe("GeoJSON geometry object"),
+      properties: z.record(z.unknown()).optional().describe("Feature properties as key-value pairs"),
+    },
+    async ({ dataset_id, geometry, properties }) => {
+      const body: Record<string, unknown> = { dataset_id, geometry };
+      if (properties) body.properties = properties;
+      const data = await gisApi("/features", apiKey, { method: "POST", body });
       return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
     }
   );
@@ -156,10 +240,17 @@ app.get("/", (c) =>
     version: "1.0.0",
     auth: "Pass your gis.ph API key via ?key= query param or x-api-key header",
     endpoint: "https://mcp.gis.ph/mcp?key=YOUR_KEY",
+    tools: [
+      "get_regions", "get_region",
+      "get_provinces", "get_province",
+      "get_municities", "get_municity",
+      "get_barangays", "get_barangay",
+      "list_datasets", "get_dataset", "create_dataset", "update_dataset",
+      "list_features", "get_feature", "get_features_by_dataset", "create_feature",
+    ],
   })
 );
 
-// Single endpoint — handles everything (GET for SSE stream, POST for messages)
 app.all("/mcp", async (c) => {
   const apiKey = c.req.query("key") ?? c.req.header("x-api-key") ?? "";
 
