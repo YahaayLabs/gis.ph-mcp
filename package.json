@@ -1,0 +1,22 @@
+{
+  "name": "gis.ph-mcp",
+  "version": "1.0.0",
+  "description": "MCP Server for GIS.ph — Philippines GIS API",
+  "main": "src/index.ts",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "cf-typegen": "wrangler types"
+  },
+  "dependencies": {
+    "@cloudflare/workers-mcp": "^0.0.13",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241106.0",
+    "typescript": "^5.5.2",
+    "wrangler": "^3.78.10"
+  }
+}
