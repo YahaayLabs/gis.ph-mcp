@@ -3,6 +3,7 @@ main = "src/index.ts"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 
+# Deploy to mcp.gis.ph
 routes = [
   { pattern = "mcp.gis.ph/*", custom_domain = true }
 ]
@@ -15,3 +16,6 @@ bindings = [
 [[migrations]]
 tag = "v1"
 new_classes = ["GisPhMCP"]
+
+# Secrets (set via CLI, never hardcoded here):
+# wrangler secret put GIS_PH_API_KEY
