@@ -5,7 +5,7 @@ compatibility_flags = ["nodejs_compat"]
 
 # Deploy to mcp.gis.ph
 routes = [
-  { pattern = "mcp.gis.ph/*", custom_domain = true }
+  { pattern = "mcp.gis.ph", custom_domain = true }
 ]
 
 [durable_objects]
