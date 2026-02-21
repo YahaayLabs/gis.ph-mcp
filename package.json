@@ -10,8 +10,10 @@
     "cf-typegen": "wrangler types"
   },
   "dependencies": {
-    "agents": "^0.0.87",
+    "@hono/mcp": "^0.2.3",
     "@modelcontextprotocol/sdk": "^1.12.0",
+    "agents": "^0.0.87",
+    "hono": "^4.12.0",
     "zod": "^3.22.4"
   },
   "devDependencies": {
