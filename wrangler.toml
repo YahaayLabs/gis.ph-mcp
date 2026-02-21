@@ -6,3 +6,10 @@ compatibility_flags = ["nodejs_compat"]
 routes = [
   { pattern = "mcp.gis.ph", custom_domain = true }
 ]
+
+[durable_objects]
+bindings = []
+
+[[migrations]]
+tag = "v2"
+deleted_classes = ["GisPhMCP"]
