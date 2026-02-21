@@ -15,7 +15,7 @@ bindings = [
 
 [[migrations]]
 tag = "v1"
-new_classes = ["GisPhMCP"]
+new_sqlite_classes = ["GisPhMCP"]
 
 # Secrets (set via CLI, never hardcoded here):
 # wrangler secret put GIS_PH_API_KEY
