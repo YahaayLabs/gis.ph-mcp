@@ -16,9 +16,7 @@ async function gisApi(
   const url = new URL(BASE_URL + path);
   if (params) {
     for (const [key, value] of Object.entries(params)) {
-      if (value !== undefined && value !== "") {
-        url.searchParams.set(key, value);
-      }
+      if (value) url.searchParams.set(key, value);
     }
   }
 
@@ -38,36 +36,25 @@ async function gisApi(
 }
 
 export class GisPhMCP extends McpAgent<Env, Record<string, never>, { apiKey: string }> {
-  server = new McpServer({
-    name: "gis-ph",
-    version: "1.0.0",
-  });
+  server = new McpServer({ name: "gis-ph", version: "1.0.0" });
+
+  // Store key as instance variable — persists for the lifetime of the DO session
+  private key: string = "";
 
   async init() {
-    // Persist the API key in DO storage so it survives across SSE messages
-    if (this.props.apiKey) {
-      await this.ctx.storage.put("apiKey", this.props.apiKey);
-    }
-
-    const getKey = async (): Promise<string> => {
-      return (
-        this.props.apiKey ||
-        (await this.ctx.storage.get<string>("apiKey")) ||
-        ""
-      );
-    };
+    this.key = this.props.apiKey ?? "";
 
     this.server.tool("get_provinces", "Get all 81 provinces in the Philippines", {}, async () => {
-      const data = await gisApi("/provinces", await getKey());
+      const data = await gisApi("/provinces", this.key);
       return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
     });
 
     this.server.tool(
       "get_province",
       "Get details of a specific province by its code",
-      { province_code: z.string().describe("Province code e.g. '0128'") },
+      { province_code: z.string().describe("Province code e.g. '1400100000'") },
       async ({ province_code }) => {
-        const data = await gisApi(`/provinces/${province_code}`, await getKey());
+        const data = await gisApi(`/provinces/${province_code}`, this.key);
         return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
       }
     );
@@ -77,7 +64,7 @@ export class GisPhMCP extends McpAgent<Env, Record<string, never>, { apiKey: str
       "Get all cities and municipalities, optionally filtered by province",
       { province_code: z.string().optional().describe("Province code to filter by") },
       async ({ province_code }) => {
-        const data = await gisApi("/cities", await getKey(), province_code ? { province_code } : undefined);
+        const data = await gisApi("/cities", this.key, province_code ? { province_code } : undefined);
         return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
       }
     );
@@ -87,7 +74,7 @@ export class GisPhMCP extends McpAgent<Env, Record<string, never>, { apiKey: str
       "Get details of a specific city or municipality by its code",
       { city_code: z.string().describe("City or municipality code") },
       async ({ city_code }) => {
-        const data = await gisApi(`/cities/${city_code}`, await getKey());
+        const data = await gisApi(`/cities/${city_code}`, this.key);
         return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
       }
     );
@@ -103,7 +90,7 @@ export class GisPhMCP extends McpAgent<Env, Record<string, never>, { apiKey: str
         const params: Record<string, string> = {};
         if (city_code) params.city_code = city_code;
         if (province_code) params.province_code = province_code;
-        const data = await gisApi("/barangays", await getKey(), params);
+        const data = await gisApi("/barangays", this.key, params);
         return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
       }
     );
@@ -113,7 +100,7 @@ export class GisPhMCP extends McpAgent<Env, Record<string, never>, { apiKey: str
       "Get details of a specific barangay by its code",
       { barangay_code: z.string().describe("Barangay code") },
       async ({ barangay_code }) => {
-        const data = await gisApi(`/barangays/${barangay_code}`, await getKey());
+        const data = await gisApi(`/barangays/${barangay_code}`, this.key);
         return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
       }
     );
@@ -123,12 +110,12 @@ export class GisPhMCP extends McpAgent<Env, Record<string, never>, { apiKey: str
       "Search for any location in the Philippines by name",
       {
         query: z.string().describe("Location name to search"),
-        type: z.enum(["province", "city", "municipality", "barangay"]).optional().describe("Narrow results by location type"),
+        type: z.enum(["province", "city", "municipality", "barangay"]).optional(),
       },
       async ({ query, type }) => {
         const params: Record<string, string> = { q: query };
         if (type) params.type = type;
-        const data = await gisApi("/search", await getKey(), params);
+        const data = await gisApi("/search", this.key, params);
         return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
       }
     );
@@ -137,11 +124,11 @@ export class GisPhMCP extends McpAgent<Env, Record<string, never>, { apiKey: str
       "reverse_geocode",
       "Find the barangay, city, and province for given coordinates",
       {
-        lat: z.number().describe("Latitude (decimal degrees)"),
-        lng: z.number().describe("Longitude (decimal degrees)"),
+        lat: z.number().describe("Latitude"),
+        lng: z.number().describe("Longitude"),
       },
       async ({ lat, lng }) => {
-        const data = await gisApi("/reverse-geocode", await getKey(), {
+        const data = await gisApi("/reverse-geocode", this.key, {
           lat: String(lat),
           lng: String(lng),
         });
@@ -157,7 +144,7 @@ export class GisPhMCP extends McpAgent<Env, Record<string, never>, { apiKey: str
         level: z.enum(["province", "city", "barangay"]).describe("Geographic level"),
       },
       async ({ location_code, level }) => {
-        const data = await gisApi("/analytics/demographics", await getKey(), {
+        const data = await gisApi("/analytics/demographics", this.key, {
           code: location_code,
           level,
         });
@@ -187,20 +174,13 @@ export default {
           name: "gis.ph MCP Server",
           version: "1.0.0",
           auth: "Pass your gis.ph API key via x-api-key header or ?key= query param",
-          endpoints: {
-            http: "https://mcp.gis.ph/mcp",
-            sse: "https://mcp.gis.ph/sse",
-          },
+          endpoints: { http: "https://mcp.gis.ph/mcp", sse: "https://mcp.gis.ph/sse" },
         }, null, 2),
         { headers: { "Content-Type": "application/json" } }
       );
     }
 
-    // Accept key from header or query param
-    const apiKey =
-      request.headers.get("x-api-key") ??
-      url.searchParams.get("key") ??
-      "";
+    const apiKey = request.headers.get("x-api-key") ?? url.searchParams.get("key") ?? "";
 
     if (!apiKey) {
       return new Response(
