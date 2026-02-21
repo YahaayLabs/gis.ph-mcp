@@ -257,17 +257,24 @@ export default {
     }
 
     // Require the user's API key for all MCP endpoints
-    const apiKey = request.headers.get("x-api-key") ?? "";
+    // We check both the x-api-key header and the 'key' query parameter
+    // (Query param is useful for Claude Desktop which doesn't support custom headers for SSE)
+    const apiKey = url.searchParams.get("key") ?? request.headers.get("x-api-key") ?? "";
+
     if (!apiKey) {
+      console.error("[gis.ph] Error: Missing API key. Provide it via 'x-api-key' header or '?key=' query param.");
       return new Response(
         JSON.stringify({
-          error: "Missing x-api-key header.",
-          message: "Provide your gis.ph API key in the x-api-key request header.",
+          error: "Missing API key.",
+          message: "Provide your gis.ph API key in the x-api-key request header or as a 'key' query parameter.",
           docs: "https://gis.ph",
         }),
         {
           status: 401,
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*",
+          },
         }
       );
     }
