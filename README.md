@@ -1,4 +1,4 @@
-# GIS.ph MCP Server
+# GIS.PH MCP Server
 
 MCP (Model Context Protocol) server for [gis.ph](https://gis.ph) — the Philippines Geographic Information System API.
 
